@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vector-validator"
+version = "0.3.0"
+description = "Validator for the Vector subnet: checks the team's signed weights and sets them on chain"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "httpx==0.28.1",
+    "bittensor-wallet==4.1.0",
+    "pynacl==1.6.2",
+    "pyyaml==6.0.3",
+]
+
+[project.optional-dependencies]
+chain = ["bittensor==11.3.5"]
+test = ["pytest==9.2.0"]
+
+[project.scripts]
+vector-validator = "vector_validator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["vector_validator*"]
+
+[tool.setuptools.package-data]
+vector_validator = ["config.example.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
