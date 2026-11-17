@@ -1,0 +1,18 @@
+
+api:
+
+network: finney
+
+netuid:
+
+weights_pubkey:
+
+wallet:
+  name:
+  hotkey: default
+  path:
+
+validator:
+  interval_s: 1200
+  max_age_s: 3600
+  dry_run: false
