@@ -94,13 +94,14 @@ the subnet with a validator permit.
 `GET https://vector.robotensor.ai/v1/weights` is public and needs no sign-in. Format `vector-weights/2`:
 
 ```
-{format: "vector-weights/2", round, week, netuid, at, king_uid,
+{format: "vector-weights/2", round, netuid, at, king_uid,
  weights: {"<uid>": w, ...}, hotkeys: {"<uid>": "<ss58>", ...},
  basis: {...},
  public_key: "<64 hex>", signature: "<base64>"}
 ```
 
-`weights` holds the team's weight per uid: the king's uid and the contributors' uids (see
+`round` is the round both competitions share (its length is a team setting). `weights` holds the team's weight per
+uid: the king's uid and the contributors' uids (see
 [Rewards](https://vector.robotensor.ai/docs/rewards)). The validator sets the uids the document lists, as published. `basis` says how the team computed
 them; the validator does not recompute anything.
 
@@ -169,8 +170,9 @@ Two calls, in `vector_validator/chain.py`:
 
 The tests are offline: no network and no chain. The chain calls are tested against fakes of the bittensor 11
 interface (`read`, `execute`) and the bittensor 9 / 10 interface (`metagraph`, `set_weights`);
-`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document produced by the team's
-server code and signed with a test key; the contract test checks it end to end.
+`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document in the team server's
+`vector-weights/2` format (`round` is the round shared by both competitions; no `week` field) signed with a test key;
+the contract test checks it end to end.
 
 ## License
 

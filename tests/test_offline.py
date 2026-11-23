@@ -27,7 +27,7 @@ def _sign(body, sk=None):
 
 def _doc(weights, hotkeys, netuid=7, at=NOW):
     return _sign({"format": "vector-weights/2", "round": 2, "at": at, "netuid": netuid, "king_uid": 1,
-                  "basis": {"contributors": {"week": 2}}, "weights": weights, "hotkeys": hotkeys})
+                  "basis": {"contributors": {"round": 2}}, "weights": weights, "hotkeys": hotkeys})
 
 
 def test_roundtrip_and_tamper():
@@ -274,7 +274,7 @@ def test_chain_calls_on_bittensor_11(monkeypatch):
 
 
 def _published(weights, hotkeys, king_uid):
-    return _sign({"format": "vector-weights/2", "round": 4, "week": 3, "at": NOW, "netuid": 7, "king_uid": king_uid,
+    return _sign({"format": "vector-weights/2", "round": 4, "at": NOW, "netuid": 7, "king_uid": king_uid,
                   "basis": {"king": {"uid": king_uid}}, "weights": weights, "hotkeys": hotkeys})
 
 
@@ -401,7 +401,7 @@ def test_contract_with_a_document_from_the_server(monkeypatch, capsys):
     raw = (DATA / "weights_v2.json").read_bytes()
     meta = json.loads((DATA / "weights_v2.meta.json").read_text())
     doc = json.loads(raw)
-    assert set(doc) == {"format", "round", "week", "weights", "hotkeys", "king_uid", "basis", "at", "netuid",
+    assert set(doc) == {"format", "round", "weights", "hotkeys", "king_uid", "basis", "at", "netuid",
                         "public_key", "signature"}
     assert verify(json.loads(raw), meta["public_key"], meta["netuid"]) == doc
     assert sum(doc["weights"].values()) == pytest.approx(1.0)
