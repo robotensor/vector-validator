@@ -10,6 +10,7 @@ from . import TEAM_PUBKEY
 from .weights import DEFAULT_API
 
 EXAMPLE = Path(__file__).with_name("config.example.yaml")
+WALLET_PATH_DEFAULT = "bittensor default (~/.bittensor/wallets)"
 
 
 def home() -> Path:
@@ -84,6 +85,7 @@ FIELDS: tuple[Field, ...] = (
     Field("wallet.hotkey", "VECTOR_VALIDATOR_WALLET_HOTKEY", "wallet_hotkey", _str, "default"),
     Field("wallet.path", "VECTOR_VALIDATOR_WALLET_PATH", "wallet_path", _str),
     Field("validator.interval_s", "VECTOR_VALIDATOR_INTERVAL_S", "interval", _float, 1200.0),
+    Field("validator.retry_s", "VECTOR_VALIDATOR_RETRY_S", "retry", _float, 60.0),
     Field("validator.max_age_s", "VECTOR_VALIDATOR_MAX_AGE_S", "max_age", _float, 3600.0),
     Field("validator.dry_run", "VECTOR_VALIDATOR_DRY_RUN", "dry_run", _bool, False),
 )
@@ -166,7 +168,7 @@ def load(flags: dict[str, Any] | None = None, config: str | None = None) -> Sett
                 raise ConfigError(f"{f.key} from {where}: {e} (got {raw!r})") from None
             break
         if source == "default" and value is None:
-            source = "not set"
+            source = WALLET_PATH_DEFAULT if f.key == "wallet.path" else "not set"
         elif source == "default" and f.key == "weights_pubkey":
             source = "built in"
         s.values[f.key], s.sources[f.key] = value, source

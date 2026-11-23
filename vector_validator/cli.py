@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--api", help="the team's API URL (default: config file `api`)")
     common.add_argument("--wallet.name", dest="wallet_name", help="wallet name")
     common.add_argument("--wallet.hotkey", dest="wallet_hotkey", help="hotkey name (default: default)")
-    common.add_argument("--wallet.path", dest="wallet_path", help="wallets folder (default: ~/.bittensor/wallets)")
+    common.add_argument("--wallet.path", dest="wallet_path", help=f"wallets folder (default: {conf.WALLET_PATH_DEFAULT})")
     common.add_argument("--subtensor.network", dest="network", help="finney, test or a ws:// endpoint (default: finney)")
     common.add_argument("--netuid", type=int, help="the subnet's netuid (default: config file `netuid`)")
     common.add_argument("--pubkey", help="the team's weights key (hex); weights signed by another key are refused")
@@ -57,9 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = p.add_subparsers(dest="cmd", required=True, metavar="command")
 
     s = sp.add_parser("run", help="fetch the signed weights, check them and set them on chain", parents=[common])
-    s.add_argument("--interval", type=float, help="seconds between rounds (default: 1200)")
+    s.add_argument("--interval", type=float, help="seconds between passes (default: 1200)")
+    s.add_argument("--retry", type=float, help="seconds before the next pass after a failed one (default: 60)")
     s.add_argument("--max-age", type=float, help="refuse weights older than this many seconds, 0: off (default: 3600)")
-    s.add_argument("--once", action="store_true", help="one round, then exit")
+    s.add_argument("--once", action="store_true", help="one pass, then exit (exit code 1 on failure)")
     s.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=None,
                    help="print the weights instead of setting them")
     s.set_defaults(fn=cmd_run)
