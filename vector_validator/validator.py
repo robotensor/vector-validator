@@ -4,6 +4,7 @@ import datetime as dt
 import math
 import sys
 import time
+from collections import defaultdict
 
 from . import chain as ch
 from . import weights as wt
@@ -45,24 +46,31 @@ def _weight(w) -> float:
 
 
 def _normalise(pairs: list[tuple[int, float]]) -> tuple[list[int], list[float]]:
-    pairs = sorted(pairs)
-    total = sum(w for _, w in pairs)
+    merged: dict[int, float] = defaultdict(float)
+    for u, w in pairs:
+        merged[u] += w
+    total = sum(merged.values())
     if total <= 0:
         return [], []
-    return [u for u, _ in pairs], [w / total for _, w in pairs]
+    uids = sorted(merged)
+    return uids, [merged[u] / total for u in uids]
 
 
 def published_total(doc: dict) -> float:
     return sum(_weight(x) for x in doc["weights"].values())
 
 
-def vector_share(doc: dict):
-    sh = doc.get("shares")
-    return sh.get("vector", "?") if isinstance(sh, dict) else "?"
+def king_holds(king_uid, listed: dict[str, str], hotkeys: list[str]) -> bool:
+    if not isinstance(king_uid, int) or isinstance(king_uid, bool) or not 0 <= king_uid < len(hotkeys):
+        return False
+    hk = listed.get(str(king_uid))
+    return bool(hk) and hotkeys[king_uid] == hk
 
 
-def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]) -> tuple[list[int], list[float], list[str]]:
+def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str],
+           king_uid: int | None = None) -> tuple[list[int], list[float], list[str]]:
     pairs, dropped, seen = [], [], set()
+    to_king = king_holds(king_uid, listed, hotkeys)
     for k, w in weights.items():
         uid, hk = int(k), listed.get(str(k))
         if uid in seen:
@@ -72,7 +80,11 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
         elif uid >= len(hotkeys):
             dropped.append(f"uid {uid}: not on the subnet")
         elif hotkeys[uid] != hk:
-            dropped.append(f"uid {uid}: now held by {hotkeys[uid]}, scored for {hk}")
+            note = f"uid {uid}: now held by {hotkeys[uid]}, scored for {hk}"
+            if to_king and _weight(w) > 0:
+                pairs.append((king_uid, _weight(w)))
+                note += f"; its share goes to the king uid {king_uid}"
+            dropped.append(note)
         elif _weight(w) > 0:
             pairs.append((uid, _weight(w)))
         seen.add(uid)
@@ -81,13 +93,13 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
 
 
 def select(doc: dict, hotkeys: list[str]) -> tuple[list[int], list[float], list[str]]:
-    return by_uid(doc["weights"], doc["hotkeys"], hotkeys)
+    return by_uid(doc["weights"], doc["hotkeys"], hotkeys, doc.get("king_uid"))
 
 
 def _print_unchecked(doc: dict) -> None:
     w = doc["weights"]
     if not w:
-        print("  (no miner earned points in the window)")
+        print("  (the document lists no uid)")
     for k, x in sorted(w.items(), key=lambda kv: -_weight(kv[1])):
         print(f"  {int(k):4d}  {_weight(x):.6f}  {doc['hotkeys'].get(k, '?')}")
 
@@ -97,8 +109,8 @@ def run_once(args, fetch, pubkey: str | None) -> bool:
     w = doc["weights"]
     print(f"[{dt.datetime.now().isoformat(timespec='seconds')}] weights at {doc['at']} "
           f"({len(w)} uids, round {doc.get('round', '?')}, {doc['format']}, key {doc['public_key'][:16]}...)")
-    print(f"  published total {published_total(doc):.6f} (vector share {vector_share(doc)}), king uid "
-          f"{doc.get('king_uid', '?')}: only these uids get weight, in these proportions")
+    print(f"  published total {published_total(doc):.6f}, king uid {doc.get('king_uid', '?')}: only these uids get "
+          "weight, in these proportions")
     try:
         bt = ch.bittensor()
     except ch.ChainUnavailable:
@@ -118,7 +130,7 @@ def run_once(args, fetch, pubkey: str | None) -> bool:
             print(f"  {u:4d}  {x:.6f}  {hotkeys[u]}")
         return True
     if not uids:
-        print("no weights to set this round")
+        print("no weights to set this pass")
         return True
     wallet = open_wallet(args)
     if wallet.hotkey.ss58_address not in hotkeys:
@@ -152,4 +164,4 @@ def main(args) -> int:
             ok = False
         if args.once:
             return 0 if ok else 1
-        time.sleep(args.interval)
+        time.sleep(args.interval if ok else args.retry)
