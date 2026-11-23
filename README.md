@@ -12,7 +12,8 @@ flowchart LR
   D --> E["keep uids still held by the listed hotkey"]
   E --> F["normalise the listed uids to sum 1"]
   F --> G["set_weights, signed by your hotkey"]
-  G -->|"every interval_s"| A
+  G -->|"set: next pass after interval_s"| A
+  B -->|"refused or outage: next pass after retry_s"| A
 ```
 
 ## Install
@@ -61,8 +62,9 @@ environment variable, which beats the file, which beats the default.
 | `weights_pubkey` | `--pubkey` | `VECTOR_VALIDATOR_WEIGHTS_PUBKEY` | none (required unless dry run) |
 | `wallet.name` | `--wallet.name` | `VECTOR_VALIDATOR_WALLET_NAME` | none |
 | `wallet.hotkey` | `--wallet.hotkey` | `VECTOR_VALIDATOR_WALLET_HOTKEY` | `default` |
-| `wallet.path` | `--wallet.path` | `VECTOR_VALIDATOR_WALLET_PATH` | `~/.bittensor/wallets` |
+| `wallet.path` | `--wallet.path` | `VECTOR_VALIDATOR_WALLET_PATH` | bittensor default (`~/.bittensor/wallets`) |
 | `validator.interval_s` | `--interval` | `VECTOR_VALIDATOR_INTERVAL_S` | `1200` |
+| `validator.retry_s` | `--retry` | `VECTOR_VALIDATOR_RETRY_S` | `60` |
 | `validator.max_age_s` | `--max-age` | `VECTOR_VALIDATOR_MAX_AGE_S` | `3600` (0 = no limit) |
 | `validator.dry_run` | `--dry-run` / `--no-dry-run` | `VECTOR_VALIDATOR_DRY_RUN` | `false` |
 
@@ -73,8 +75,8 @@ the subnet with a validator permit.
 
 ```bash
 .venv/bin/vector-validator run --config config.yaml --dry-run --once   # check one document, set nothing
-.venv/bin/vector-validator run --config config.yaml --once             # one round, then exit (exit code 1 on failure)
-.venv/bin/vector-validator run --config config.yaml                    # loop: one round every interval_s
+.venv/bin/vector-validator run --config config.yaml --once             # one pass, then exit (exit code 1 on failure)
+.venv/bin/vector-validator run --config config.yaml                    # loop: one pass every interval_s
 ```
 
 - It refuses to start without a `netuid`.
@@ -82,7 +84,10 @@ the subnet with a validator permit.
   against the key the document carries, and warns.
 - A dry run without the bittensor SDK prints the weights as published, without the metagraph check.
 - It warns when your hotkey is not registered on the subnet.
-- Errors in one round are printed and the loop goes on. Run it under systemd, pm2 or a similar supervisor.
+- Errors in one pass are printed and the loop goes on: the next pass comes after `retry_s` (60 s) after a failed
+  pass and after `interval_s` (1200 s) after a successful one. Run it under systemd, pm2 or a similar supervisor.
+- On a refused document or an API outage nothing is set that pass, the last weights stay on chain and age out, and
+  an outage longer than the subnet's activity cutoff makes the validator inactive.
 
 ## The weights document
 
@@ -91,23 +96,24 @@ the subnet with a validator permit.
 ```
 {format: "vector-weights/2", round, week, netuid, at, king_uid,
  weights: {"<uid>": w, ...}, hotkeys: {"<uid>": "<ss58>", ...},
- shares: {vector, expert, contributors}, basis: {...},
+ basis: {...},
  public_key: "<64 hex>", signature: "<base64>"}
 ```
 
 `weights` holds the team's weight per uid: the king's uid and the contributors' uids (see
-[Rewards](https://vector.robotensor.ai/docs/rewards)). The validator sets the uids the document lists, as published. `shares` and `basis` say how the team
-computed them; the validator does not recompute anything.
+[Rewards](https://vector.robotensor.ai/docs/rewards)). The validator sets the uids the document lists, as published. `basis` says how the team computed
+them; the validator does not recompute anything.
 
 ### How the weights are set
 
 - The validator sets weights on exactly the listed uids (after the checks below), in the published proportions,
   and on no other uid. It adds no uid of its own.
-- It divides the kept weights by their total before calling the SDK, so they sum to 1. A uid dropped by a check
-  leaves the others in their published proportions.
+- It divides the kept weights by their total before calling the SDK, so they sum to 1. A share whose uid changed
+  hands goes to the king (when the king's uid passes the same check); any other dropped uid leaves the others in
+  their published proportions.
 - The SDK scales the largest weight to 65535 (u16) and the chain uses each validator's weights relative to their
   sum.
-- Each round prints the document's round, its uids and `king_uid`. A dry run prints the normalised values.
+- Each pass prints the document's `round`, its uids and `king_uid`. A dry run prints the normalised values.
 
 The signature is ed25519 over the document without `public_key` and `signature`, as JSON with sorted keys and no
 spaces (`json.dumps(body, sort_keys=True, separators=(",", ":"))`).
@@ -125,7 +131,7 @@ sequenceDiagram
   V->>V: netuid matches, uids are integers, at is recent
   V->>C: metagraph hotkeys
   C-->>V: hotkey per uid
-  V->>V: drop uids now held by another hotkey
+  V->>V: drop uids now held by another hotkey, their share to the king
   V->>C: set_weights(listed uids, weights / their total)
   C-->>V: success or message
 ```
@@ -141,9 +147,10 @@ A document is refused when:
   also with `max_age_s` 0);
 - the response is not a JSON object or is larger than 16 MB.
 
-A uid is dropped (and the rest renormalised) when it is listed twice, has no hotkey listed, is not on the subnet,
+A uid is dropped when it is listed twice, has no hotkey listed, is not on the subnet,
 or is now held by a different hotkey than the one the team scored. So a weight never goes to whoever took over a
-deregistered uid. Non-finite and non-positive weights count as 0.
+deregistered uid: a share whose uid changed hands goes to the king, if the king's uid is still held by the listed
+hotkey, else the rest is renormalised. Non-finite and non-positive weights count as 0.
 
 ## Chain calls
 
@@ -160,7 +167,10 @@ Two calls, in `vector_validator/chain.py`:
 .venv/bin/python -m pytest
 ```
 
-The tests are offline: no network and no chain.
+The tests are offline: no network and no chain. The chain calls are tested against fakes of the bittensor 11
+interface (`read`, `execute`) and the bittensor 9 / 10 interface (`metagraph`, `set_weights`);
+`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document produced by the team's
+server code and signed with a test key; the contract test checks it end to end.
 
 ## License
 
