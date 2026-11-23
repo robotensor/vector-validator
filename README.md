@@ -134,9 +134,12 @@ A document is refused when:
 
 - the format is not `vector-weights/2`;
 - it is unsigned, signed by a key other than the pinned one, or the signature does not verify;
-- `weights` or `hotkeys` is missing, a weight is keyed by something other than a uid, or `netuid` is missing;
+- `weights` or `hotkeys` is missing, a weight is keyed by something other than a uid, a listed hotkey is not a
+  string, or `netuid` is missing;
 - `netuid` differs from yours;
-- `at` is older than `max_age_s`.
+- `at` is missing, not an ISO time, older than `max_age_s`, or more than 300 s in the future (always checked,
+  also with `max_age_s` 0);
+- the response is not a JSON object or is larger than 16 MB.
 
 A uid is dropped (and the rest renormalised) when it is listed twice, has no hotkey listed, is not on the subnet,
 or is now held by a different hotkey than the one the team scored. So a weight never goes to whoever took over a

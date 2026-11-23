@@ -14,12 +14,23 @@ def pinned_pubkey(key: str | None) -> str | None:
     return key.lower().removeprefix("0x") if key else None
 
 
+MAX_SKEW_S = 300.0
+
+
 def fetch_verified(fetch, pubkey: str | None, max_age_s: float, netuid: int | None = None) -> dict:
     doc = wt.verify(fetch(), pubkey, netuid)
-    at = dt.datetime.fromisoformat(doc["at"])
+    if not isinstance(doc.get("at"), str):
+        raise ValueError("the weights do not say when they were made (at)")
+    try:
+        at = dt.datetime.fromisoformat(doc["at"])
+    except ValueError:
+        raise ValueError(f"the weights' time {doc['at'][:64]!r} is not an ISO time") from None
     if at.tzinfo is None:
         at = at.replace(tzinfo=dt.timezone.utc)
     age = (dt.datetime.now(dt.timezone.utc) - at).total_seconds()
+    if age < -MAX_SKEW_S:
+        raise ValueError(f"the weights are dated {-age:.0f}s in the future (more than {MAX_SKEW_S:.0f}s of clock "
+                         "skew): refusing them")
     if max_age_s and age > max_age_s:
         raise ValueError(f"the weights are {age:.0f}s old (limit {max_age_s:.0f}s)")
     return doc

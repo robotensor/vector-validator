@@ -315,3 +315,55 @@ def test_v7_king_and_listed_rest(monkeypatch):
     assert validator.run_once(_vargs(), lambda: doc, pk)
     (netuid, uids, ws), = calls
     assert netuid == 7 and uids == [0, 2] and ws == pytest.approx([0.7, 0.3])
+
+
+def test_run_once_refuses_weights_from_the_future(monkeypatch):
+    calls = _chain(monkeypatch, HK)
+    ahead = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=3)).isoformat()
+    doc, pk = _doc({"1": 1.0}, {"1": "5Alice"}, at=ahead)
+    with pytest.raises(ValueError, match="future"):
+        validator.run_once(_vargs(), lambda: doc, pk)
+    with pytest.raises(ValueError, match="future"):
+        validator.run_once(_vargs(max_age=0), lambda: doc, pk)
+    soon = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=60)).isoformat()
+    doc, pk = _doc({"1": 1.0}, {"1": "5Alice"}, at=soon)
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    assert calls == [(7, [1], [1.0])]
+
+
+@pytest.mark.parametrize("at", ["yesterday", 12345, None])
+def test_a_bad_time_is_refused(monkeypatch, at):
+    _chain(monkeypatch, HK)
+    doc, pk = _doc({"1": 1.0}, {"1": "5Alice"}, at=at)
+    with pytest.raises(ValueError, match="time|when"):
+        validator.run_once(_vargs(), lambda: doc, pk)
+
+
+def test_odd_uids_and_hotkeys_are_refused():
+    for weights, hotkeys, msg in (({"²": 1.0}, {"²": "5Alice"}, "uid"), ({"1" * 12: 1.0}, {}, "uid"),
+                                  ({"1": 1.0}, {"1": {"x": 1}}, "not strings")):
+        doc, pk = _doc(weights, hotkeys)
+        with pytest.raises(ValueError, match=msg):
+            verify(doc, pk)
+    with pytest.raises(ValueError, match="JSON object"):
+        verify([1, 2])
+    doc, pk = _doc({"1": 1.0}, {"1": "5Alice"})
+    with pytest.raises(ValueError, match="strings"):
+        verify({**doc, "signature": 5}, pk)
+
+
+def test_fetch_bounds_and_checks_the_response(monkeypatch):
+    import httpx
+
+    from vector_validator import weights as wt
+    bodies = {"big": b"{" + b" " * 5000 + b"}", "list": b"[1]", "text": b"<html>", "ok": b'{"format": "x"}'}
+
+    def stream(method, url, timeout=None, kind="ok"):
+        tr = httpx.MockTransport(lambda req: httpx.Response(200, content=bodies[kind]))
+        return httpx.Client(transport=tr).stream(method, url)
+    for kind, msg in (("big", "larger than 4000"), ("list", "JSON object"), ("text", "not JSON")):
+        monkeypatch.setattr(httpx, "stream", lambda m, u, timeout=None, k=kind: stream(m, u, timeout, k))
+        with pytest.raises((ValueError, wt.ApiError), match=msg):
+            wt.fetch("http://api", max_bytes=4000)
+    monkeypatch.setattr(httpx, "stream", lambda m, u, timeout=None: stream(m, u, timeout, "ok"))
+    assert wt.fetch("http://api") == {"format": "x"}
