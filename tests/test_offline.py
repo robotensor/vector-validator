@@ -273,6 +273,19 @@ def test_chain_calls_on_bittensor_11(monkeypatch):
     assert sent == {"intent": {"netuid": 7, "uids": [0, 2], "weights": [0.5, 0.5]}, "wallet": "hotkey-keypair"}
 
 
+def test_commit_reveal_says_when_the_chain_reveals(monkeypatch):
+    class Sub:
+        def read(self, name, **kw):
+            return []
+
+        def execute(self, intent, wallet):
+            return SimpleNamespace(success=True, message="Success", data={"reveal_round": 34225266})
+
+    monkeypatch.setattr(ch, "bittensor", lambda: SimpleNamespace(intents=SimpleNamespace(SetWeights=lambda **kw: kw)))
+    ok, msg = ch.set_weights(Sub(), SimpleNamespace(hotkey="k"), 7, [0], [1.0])
+    assert ok and msg == "Success; commit-reveal: committed, the chain reveals it at drand round 34225266"
+
+
 def _published(weights, hotkeys, king_uid):
     return _sign({"format": "vector-weights/2", "round": 4, "at": NOW, "netuid": 7, "king_uid": king_uid,
                   "basis": {"king": {"uid": king_uid}}, "weights": weights, "hotkeys": hotkeys})

@@ -32,7 +32,12 @@ def set_weights(sub, wallet, netuid: int, uids: list[int], weights: list[float])
         signer = getattr(wallet, "hotkey", wallet)
         res = sub.execute(bt.intents.SetWeights(netuid=netuid, uids=list(uids), weights=list(weights)), signer)
         ok = getattr(res, "success", None)
-        return (bool(res) if ok is None else bool(ok)), str(getattr(res, "message", "") or getattr(res, "error", "") or "")
+        msg = str(getattr(res, "message", "") or getattr(res, "error", "") or "")
+        data = getattr(res, "data", None)
+        reveal = data.get("reveal_round") if isinstance(data, dict) else None
+        if ok and reveal is not None:
+            msg = (msg + "; " if msg else "") + f"commit-reveal: committed, the chain reveals it at drand round {reveal}"
+        return (bool(res) if ok is None else bool(ok)), msg
     res = sub.set_weights(wallet=wallet, netuid=netuid, uids=uids, weights=weights,
                           wait_for_inclusion=True, wait_for_finalization=False)
     if isinstance(res, tuple):

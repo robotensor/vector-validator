@@ -88,6 +88,14 @@ the subnet with a validator permit.
   pass and after `interval_s` (1200 s) after a successful one. Run it under systemd, pm2 or a similar supervisor.
 - On a refused document or an API outage nothing is set that pass, the last weights stay on chain and age out, and
   an outage longer than the subnet's activity cutoff makes the validator inactive.
+- Commit-reveal: on a subnet with `commit_reveal_weights_enabled` the SDK sends a timelocked commit instead of the
+  weights; the chain reveals it by itself after `commit_reveal_period` epochs, and only then does
+  `Weights[netuid][your uid]` change. The pass prints `commit-reveal: committed, the chain reveals it at drand round
+  <n>`; `bittensor` 11's `Subtensor.read("timelocked_weight_commits", netuid=…)` lists the pending commit and its
+  `reveals_at`. No reveal call is needed.
+- Rate limit: the chain accepts one set (or commit) per `weights_rate_limit` blocks. A pass inside that window fails
+  with `ChainError: … last set N blocks ago; the rate limit is M blocks` and the next try comes after `retry_s`. Keep
+  `interval_s` at or above `weights_rate_limit` × 12 s (the default 1200 s matches a limit of 100 blocks).
 
 ## The weights document
 
