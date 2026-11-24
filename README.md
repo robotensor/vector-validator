@@ -112,7 +112,8 @@ the subnet with a validator permit.
 uid: the expert ranks' uids (ranks 1, 2 and 3 get 70 %, 20 % and 10 % of the expert part), the contributors' uids and
 the burn uid for what nobody claims (see [Rewards](https://vector.robotensor.ai/docs/rewards)). `king_uid` is rank 1's
 uid (else the burn uid), kept for older validators; `basis.expert = {round, ranks: [{rank, share, hotkey, uid,
-registered}], burned}` lists the ranks (it replaced `basis.king`). The validator sets the uids the document lists, as published. `basis` says how the team computed
+registered}], burned}` lists the ranks (it replaced `basis.king`); `basis.split = {ratio, expert, contributors}` is how Vector's
+share was split between the ranks and the contributors (1 : 2 by default; the team can change it). The validator sets the uids the document lists, as published. `basis` says how the team computed
 them; the validator does not recompute anything.
 
 ### How the weights are set
