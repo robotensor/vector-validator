@@ -6,3 +6,4 @@ dist/
 MUJOCO_LOG.TXT
 .venv/
 config.yaml
+config.*.yaml
