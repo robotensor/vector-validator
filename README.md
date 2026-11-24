@@ -124,7 +124,7 @@ them; the validator does not recompute anything.
   hands, a rank's part as much as a contributor's, goes to the document's burn uid (`basis.contributors.burn_uid`,
   the subnet owner's uid, which the chain burns) when that uid is on the subnet and, if listed, still held by the
   listed hotkey; the note names the rank (`(expert rank 2)`). A document without `burn_uid` and without
-  `basis.expert` (before v9.3) sends it to the king instead, under the same check. Any other dropped uid leaves the
+  `basis.expert` (an older document) sends it to the king instead, under the same check. Any other dropped uid leaves the
   others in their published proportions.
 - The SDK scales the largest weight to 65535 (u16) and the chain uses each validator's weights relative to their
   sum.
@@ -167,7 +167,7 @@ A uid is dropped when it is listed twice, has no hotkey listed, is not on the su
 or is now held by a different hotkey than the one the team scored. So a weight never goes to whoever took over a
 deregistered uid: a share whose uid changed hands goes to the burn uid (the owner's uid, burned by the chain), as
 the team's server does for a share no registered address claims; with no usable burn uid the rest is renormalised.
-Documents from before v9.3 (no `burn_uid`, no `basis.expert`) send it to the king's uid instead. Non-finite and non-positive weights count as 0.
+Older documents (no `burn_uid`, no `basis.expert`) send it to the king's uid instead. Non-finite and non-positive weights count as 0.
 
 ## Chain calls
 
@@ -186,9 +186,8 @@ Two calls, in `vector_validator/chain.py`:
 
 The tests are offline: no network and no chain. The chain calls are tested against fakes of the bittensor 11
 interface (`read`, `execute`) and the bittensor 9 / 10 interface (`metagraph`, `set_weights`);
-`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document made by the team server
-before v10 (`vector-weights/2` with `basis.king`; `round` is the round shared by both competitions; no `week` field)
-and `tests/data/weights_v10.json` one in the v10 shape (`basis.expert` with two ranks, rank 3 empty and burned to
+`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is an older document made by the team server
+(`vector-weights/2` with `basis.king`) and `tests/data/weights_v10.json` one in the current shape (`basis.expert` with two ranks, rank 3 empty and burned to
 uid 0, `king_uid` = rank 1's uid), each signed with a test key; the contract tests check both end to end, and that a
 rank uid that changed hands has its part burned.
 

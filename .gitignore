@@ -3,7 +3,6 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
-MUJOCO_LOG.TXT
 .venv/
 config.yaml
 config.*.yaml

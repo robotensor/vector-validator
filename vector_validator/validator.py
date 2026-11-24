@@ -81,7 +81,7 @@ def burn_uid_of(doc: dict):
 
 
 def expert_ranks(doc: dict) -> list[dict]:
-    """basis.expert.ranks (v10): [{rank, share, hotkey, uid, registered}], rank 1 (the king) first."""
+    """basis.expert.ranks: [{rank, share, hotkey, uid, registered}], rank 1 (the king) first."""
     b = doc.get("basis") if isinstance(doc.get("basis"), dict) else {}
     e = b.get("expert") if isinstance(b.get("expert"), dict) else {}
     return [r for r in (e.get("ranks") if isinstance(e.get("ranks"), list) else []) if isinstance(r, dict)]
@@ -132,8 +132,8 @@ def has_expert_basis(doc: dict) -> bool:
 
 
 def select(doc: dict, hotkeys: list[str]) -> tuple[list[int], list[float], list[str]]:
-    # v10 (basis.expert): a share whose uid changed hands, a rank's or a contributor's, goes to burn_uid only; the
-    # king fallback is for documents from before v9.3 (no burn_uid, no basis.expert).
+    # basis.expert: a share whose uid changed hands, a rank's or a contributor's, goes to burn_uid only; the
+    # king fallback is for older documents (no burn_uid, no basis.expert).
     king = None if has_expert_basis(doc) else doc.get("king_uid")
     return by_uid(doc["weights"], doc["hotkeys"], hotkeys, king, burn_uid_of(doc), rank_uids(doc))
 
