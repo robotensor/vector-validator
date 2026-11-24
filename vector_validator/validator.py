@@ -79,8 +79,25 @@ def burn_uid_of(doc: dict):
     return c.get("burn_uid") if isinstance(c, dict) else None
 
 
+def expert_ranks(doc: dict) -> list[dict]:
+    """basis.expert.ranks (v10): [{rank, share, hotkey, uid, registered}], rank 1 (the king) first."""
+    b = doc.get("basis") if isinstance(doc.get("basis"), dict) else {}
+    e = b.get("expert") if isinstance(b.get("expert"), dict) else {}
+    return [r for r in (e.get("ranks") if isinstance(e.get("ranks"), list) else []) if isinstance(r, dict)]
+
+
+def rank_uids(doc: dict) -> dict[int, int]:
+    out = {}
+    for r in expert_ranks(doc):
+        u, k = r.get("uid"), r.get("rank")
+        if isinstance(u, int) and not isinstance(u, bool) and isinstance(k, int) and not isinstance(k, bool):
+            out.setdefault(u, k)
+    return out
+
+
 def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str],
-           king_uid: int | None = None, burn_uid: int | None = None) -> tuple[list[int], list[float], list[str]]:
+           king_uid: int | None = None, burn_uid: int | None = None,
+           ranks: dict[int, int] | None = None) -> tuple[list[int], list[float], list[str]]:
     pairs, dropped, seen = [], [], set()
     if burn_uid is not None:
         dest, what = (burn_uid, "burn") if burn_holds(burn_uid, listed, hotkeys) else (None, "")
@@ -96,6 +113,8 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
             dropped.append(f"uid {uid}: not on the subnet")
         elif hotkeys[uid] != hk:
             note = f"uid {uid}: now held by {hotkeys[uid]}, scored for {hk}"
+            if (ranks or {}).get(uid):
+                note += f" (expert rank {ranks[uid]})"
             if dest is not None and _weight(w) > 0:
                 pairs.append((dest, _weight(w)))
                 note += f"; its share goes to the {what} uid {dest}"
@@ -107,8 +126,15 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
     return uids, ws, dropped
 
 
+def has_expert_basis(doc: dict) -> bool:
+    return isinstance(doc.get("basis"), dict) and isinstance(doc["basis"].get("expert"), dict)
+
+
 def select(doc: dict, hotkeys: list[str]) -> tuple[list[int], list[float], list[str]]:
-    return by_uid(doc["weights"], doc["hotkeys"], hotkeys, doc.get("king_uid"), burn_uid_of(doc))
+    # v10 (basis.expert): a share whose uid changed hands, a rank's or a contributor's, goes to burn_uid only; the
+    # king fallback is for documents from before v9.3 (no burn_uid, no basis.expert).
+    king = None if has_expert_basis(doc) else doc.get("king_uid")
+    return by_uid(doc["weights"], doc["hotkeys"], hotkeys, king, burn_uid_of(doc), rank_uids(doc))
 
 
 def _print_unchecked(doc: dict) -> None:
@@ -126,6 +152,11 @@ def run_once(args, fetch, pubkey: str | None) -> bool:
           f"({len(w)} uids, round {doc.get('round', '?')}, {doc['format']}, key {doc['public_key'][:16]}...)")
     print(f"  published total {published_total(doc):.6f}, king uid {doc.get('king_uid', '?')}: only these uids get "
           "weight, in these proportions")
+    ranks = expert_ranks(doc)
+    if ranks:
+        print("  expert ranks: " + ", ".join(
+            f"rank {r.get('rank')} uid {r.get('uid') if r.get('uid') is not None else 'none (burned)'}"
+            f" ({100 * _weight(r.get('share')):g}%)" for r in ranks))
     try:
         bt = ch.bittensor()
     except ch.ChainUnavailable:

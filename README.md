@@ -109,8 +109,10 @@ the subnet with a validator permit.
 ```
 
 `round` is the round both competitions share (its length is a team setting). `weights` holds the team's weight per
-uid: the king's uid and the contributors' uids (see
-[Rewards](https://vector.robotensor.ai/docs/rewards)). The validator sets the uids the document lists, as published. `basis` says how the team computed
+uid: the expert ranks' uids (ranks 1, 2 and 3 get 70 %, 20 % and 10 % of the expert part), the contributors' uids and
+the burn uid for what nobody claims (see [Rewards](https://vector.robotensor.ai/docs/rewards)). `king_uid` is rank 1's
+uid (else the burn uid), kept for older validators; `basis.expert = {round, ranks: [{rank, share, hotkey, uid,
+registered}], burned}` lists the ranks (it replaced `basis.king`). The validator sets the uids the document lists, as published. `basis` says how the team computed
 them; the validator does not recompute anything.
 
 ### How the weights are set
@@ -118,13 +120,15 @@ them; the validator does not recompute anything.
 - The validator sets weights on exactly the listed uids (after the checks below), in the published proportions,
   and on no other uid. It adds no uid of its own.
 - It divides the kept weights by their total before calling the SDK, so they sum to 1. A share whose uid changed
-  hands goes to the document's burn uid (`basis.contributors.burn_uid`, the subnet owner's uid, which the chain burns)
-  when that uid is on the subnet and, if listed, still held by the listed hotkey. A document without `burn_uid`
-  (before v9.3) sends it to the king instead, under the same check. Any other dropped uid leaves the others in their
-  published proportions.
+  hands, a rank's part as much as a contributor's, goes to the document's burn uid (`basis.contributors.burn_uid`,
+  the subnet owner's uid, which the chain burns) when that uid is on the subnet and, if listed, still held by the
+  listed hotkey; the note names the rank (`(expert rank 2)`). A document without `burn_uid` and without
+  `basis.expert` (before v9.3) sends it to the king instead, under the same check. Any other dropped uid leaves the
+  others in their published proportions.
 - The SDK scales the largest weight to 65535 (u16) and the chain uses each validator's weights relative to their
   sum.
-- Each pass prints the document's `round`, its uids and `king_uid`. A dry run prints the normalised values.
+- Each pass prints the document's `round`, its uids, `king_uid` and the expert ranks (`basis.expert.ranks`). A dry
+  run prints the normalised values.
 
 The signature is ed25519 over the document without `public_key` and `signature`, as JSON with sorted keys and no
 spaces (`json.dumps(body, sort_keys=True, separators=(",", ":"))`).
@@ -162,7 +166,7 @@ A uid is dropped when it is listed twice, has no hotkey listed, is not on the su
 or is now held by a different hotkey than the one the team scored. So a weight never goes to whoever took over a
 deregistered uid: a share whose uid changed hands goes to the burn uid (the owner's uid, burned by the chain), as
 the team's server does for a share no registered address claims; with no usable burn uid the rest is renormalised.
-Documents from before v9.3 (no `burn_uid`) send it to the king's uid instead. Non-finite and non-positive weights count as 0.
+Documents from before v9.3 (no `burn_uid`, no `basis.expert`) send it to the king's uid instead. Non-finite and non-positive weights count as 0.
 
 ## Chain calls
 
@@ -181,9 +185,11 @@ Two calls, in `vector_validator/chain.py`:
 
 The tests are offline: no network and no chain. The chain calls are tested against fakes of the bittensor 11
 interface (`read`, `execute`) and the bittensor 9 / 10 interface (`metagraph`, `set_weights`);
-`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document in the team server's
-`vector-weights/2` format (`round` is the round shared by both competitions; no `week` field) signed with a test key;
-the contract test checks it end to end.
+`requirements.lock` installs bittensor 11.3.5. `tests/data/weights_v2.json` is a document made by the team server
+before v10 (`vector-weights/2` with `basis.king`; `round` is the round shared by both competitions; no `week` field)
+and `tests/data/weights_v10.json` one in the v10 shape (`basis.expert` with two ranks, rank 3 empty and burned to
+uid 0, `king_uid` = rank 1's uid), each signed with a test key; the contract tests check both end to end, and that a
+rank uid that changed hands has its part burned.
 
 ## License
 

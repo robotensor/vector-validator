@@ -365,6 +365,39 @@ def test_a_share_whose_uid_changed_hands_is_burned_when_the_document_names_a_bur
     assert uids == [0, 1, 3] and not any("goes to" in d for d in dropped)
 
 
+def _ranked(weights, hotkeys, ranks, burn_uid=0):
+    basis = {"expert": {"round": 4, "ranks": ranks, "burned": 0.0}, "contributors": {"round": 4, "burned": 0.0}}
+    if burn_uid is not None:
+        basis["contributors"]["burn_uid"] = burn_uid
+    return _sign({"format": "vector-weights/2", "round": 4, "at": NOW, "netuid": 7, "king_uid": ranks[0]["uid"],
+                  "basis": basis, "weights": weights, "hotkeys": hotkeys})
+
+
+RANKS = [{"rank": 1, "share": 0.7, "hotkey": "5Alice", "uid": 1, "registered": True},
+         {"rank": 2, "share": 0.2, "hotkey": "5OldBob", "uid": 2, "registered": True},
+         {"rank": 3, "share": 0.1, "hotkey": "5Carol", "uid": 3, "registered": True}]
+
+
+def test_a_rank_uid_that_changed_hands_has_its_part_burned(monkeypatch, capsys):
+    w = {"1": 0.35, "2": 0.1, "3": 0.05, "4": 0.5}
+    listed = {"1": "5Alice", "2": "5OldBob", "3": "5Carol", "4": "5Dave"}
+    doc, pk = _ranked(w, listed, RANKS)
+    calls = _chain(monkeypatch, HK + ["5Dave"])
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    (netuid, uids, ws), = calls
+    assert uids == [0, 1, 3, 4] and ws == pytest.approx([0.1, 0.35, 0.05, 0.5])
+    out = capsys.readouterr().out
+    assert "expert ranks: rank 1 uid 1 (70%), rank 2 uid 2 (20%), rank 3 uid 3 (10%)" in out
+    assert "uid 2: now held by 5Bob, scored for 5OldBob (expert rank 2); its share goes to the burn uid 0" in out
+    king_moved = {**doc, "hotkeys": {**listed, "1": "5OldAlice"}}
+    uids, ws, dropped = validator.select(king_moved, HK + ["5Dave"])
+    assert 1 not in uids and ws[uids.index(0)] == pytest.approx(0.45) and any("(expert rank 1)" in d for d in dropped)
+    doc, _ = _ranked(w, listed, RANKS, burn_uid=None)
+    uids, ws, dropped = validator.select(doc, HK + ["5Dave"])
+    assert uids == [1, 3, 4] and ws == pytest.approx([0.35 / 0.9, 0.05 / 0.9, 0.5 / 0.9])
+    assert not any("goes to" in d for d in dropped)
+
+
 def test_dropped_share_is_renormalised_when_the_king_fails_the_check(monkeypatch):
     w = {"1": 0.4, "2": 0.35, "3": 0.25}
     for king, listed in ((1, {"1": "5OldAlice", "2": "5OldBob", "3": "5Carol"}),
@@ -463,6 +496,34 @@ def test_contract_with_a_document_from_the_server(monkeypatch, capsys):
     assert other not in uids2 and sum(ws2) == pytest.approx(1.0)
     burn = doc["basis"]["contributors"]["burn_uid"]
     assert burn not in doc["weights"] and ws2[uids2.index(burn)] == pytest.approx(doc["weights"][str(other)])
+    assert ws2[uids2.index(doc["king_uid"])] == pytest.approx(doc["weights"][str(doc["king_uid"])])
+
+
+def test_contract_with_a_v10_document(monkeypatch, capsys):
+    raw = (DATA / "weights_v10.json").read_bytes()
+    meta = json.loads((DATA / "weights_v10.meta.json").read_text())
+    doc = json.loads(raw)
+    assert set(doc) == {"format", "round", "weights", "hotkeys", "king_uid", "basis", "at", "netuid",
+                        "public_key", "signature"}
+    assert set(doc["basis"]) == {"expert", "contributors"} and "king" not in doc["basis"]
+    ranks = doc["basis"]["expert"]["ranks"]
+    assert doc["king_uid"] == ranks[0]["uid"] and [r["rank"] for r in ranks] == [1, 2]
+    assert verify(json.loads(raw), meta["public_key"], meta["netuid"]) == doc
+    calls = _chain(monkeypatch, meta["metagraph"])
+    args = _vargs(netuid=meta["netuid"], max_age=0.0)
+    assert validator.run_once(args, lambda: json.loads(raw), meta["public_key"])
+    (netuid, uids, ws), = calls
+    assert uids == sorted(int(k) for k in doc["weights"]) and ws == pytest.approx([doc["weights"][str(u)] for u in uids])
+    assert "expert ranks: rank 1 uid 1 (70%), rank 2 uid 2 (20%)" in capsys.readouterr().out
+    moved = list(meta["metagraph"])
+    moved[ranks[1]["uid"]] = "5Someone"
+    calls.clear()
+    monkeypatch.setattr(ch, "metagraph_hotkeys", lambda sub, netuid: list(moved))
+    assert validator.run_once(args, lambda: json.loads(raw), meta["public_key"])
+    (_, uids2, ws2), = calls
+    burn, r2 = doc["basis"]["contributors"]["burn_uid"], str(ranks[1]["uid"])
+    assert ranks[1]["uid"] not in uids2
+    assert ws2[uids2.index(burn)] == pytest.approx(doc["weights"][str(burn)] + doc["weights"][r2])
     assert ws2[uids2.index(doc["king_uid"])] == pytest.approx(doc["weights"][str(doc["king_uid"])])
 
 
