@@ -99,7 +99,7 @@ the subnet with a validator permit.
 
 ## The weights document
 
-`GET https://vector.robotensor.ai/v1/weights` is public and needs no sign-in. Weights start when round 1 ends; until then it answers 503 and the validator sets nothing. Format `vector-weights/2`:
+`GET https://vector.robotensor.ai/v1/weights` is public and needs no sign-in. While nobody but the burn uid would get weight it answers 503 and the validator sets nothing. Format `vector-weights/2`:
 
 ```
 {format: "vector-weights/2", round, netuid, at, king_uid,
