@@ -342,6 +342,29 @@ def test_a_share_whose_uid_changed_hands_goes_to_the_king(monkeypatch, capsys):
     assert any("uid 9: not on the subnet" == d for d in dropped)
 
 
+def test_a_share_whose_uid_changed_hands_is_burned_when_the_document_names_a_burn_uid(monkeypatch, capsys):
+    w = {"0": 0.7, "1": 0.12, "2": 0.1, "3": 0.08}
+    listed = {"0": HK[0], "1": "5Alice", "2": "5OldBob", "3": "5Carol"}
+    doc, pk = _sign({"format": "vector-weights/2", "round": 4, "at": NOW, "netuid": 7, "king_uid": 1,
+                     "basis": {"king": {"uid": 1}, "contributors": {"burn_uid": 0, "burned": 0.0}},
+                     "weights": w, "hotkeys": listed})
+    calls = _chain(monkeypatch, HK)
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    (netuid, uids, ws), = calls
+    assert uids == [0, 1, 3] and ws == pytest.approx([0.8, 0.12, 0.08])
+    assert "its share goes to the burn uid 0" in capsys.readouterr().out
+    unlisted = {**doc, "weights": {k: v for k, v in w.items() if k != "0"},
+                "hotkeys": {k: v for k, v in listed.items() if k != "0"}}
+    uids, ws, _ = validator.select(unlisted, HK)
+    assert uids == [0, 1, 3] and ws == pytest.approx([0.1 / 0.3, 0.12 / 0.3, 0.08 / 0.3])
+    moved = {**doc, "hotkeys": {**listed, "0": "5NotTheOwner"}}
+    uids, ws, dropped = validator.select(moved, HK)
+    assert 0 not in uids and not any("goes to" in d for d in dropped)
+    gone = {**doc, "basis": {"contributors": {"burn_uid": 99}}}
+    uids, ws, dropped = validator.select(gone, HK)
+    assert uids == [0, 1, 3] and not any("goes to" in d for d in dropped)
+
+
 def test_dropped_share_is_renormalised_when_the_king_fails_the_check(monkeypatch):
     w = {"1": 0.4, "2": 0.35, "3": 0.25}
     for king, listed in ((1, {"1": "5OldAlice", "2": "5OldBob", "3": "5Carol"}),
@@ -438,8 +461,9 @@ def test_contract_with_a_document_from_the_server(monkeypatch, capsys):
     assert validator.run_once(args, lambda: json.loads(raw), meta["public_key"])
     (_, uids2, ws2), = calls
     assert other not in uids2 and sum(ws2) == pytest.approx(1.0)
-    king = uids2.index(doc["king_uid"])
-    assert ws2[king] == pytest.approx(doc["weights"][str(doc["king_uid"])] + doc["weights"][str(other)])
+    burn = doc["basis"]["contributors"]["burn_uid"]
+    assert burn not in doc["weights"] and ws2[uids2.index(burn)] == pytest.approx(doc["weights"][str(other)])
+    assert ws2[uids2.index(doc["king_uid"])] == pytest.approx(doc["weights"][str(doc["king_uid"])])
 
 
 def _serve(monkeypatch, status, body):

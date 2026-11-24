@@ -67,10 +67,25 @@ def king_holds(king_uid, listed: dict[str, str], hotkeys: list[str]) -> bool:
     return bool(hk) and hotkeys[king_uid] == hk
 
 
+def burn_holds(burn_uid, listed: dict[str, str], hotkeys: list[str]) -> bool:
+    if not isinstance(burn_uid, int) or isinstance(burn_uid, bool) or not 0 <= burn_uid < len(hotkeys):
+        return False
+    hk = listed.get(str(burn_uid))
+    return not hk or hotkeys[burn_uid] == hk
+
+
+def burn_uid_of(doc: dict):
+    c = ((doc.get("basis") or {}).get("contributors") or {}) if isinstance(doc.get("basis"), dict) else {}
+    return c.get("burn_uid") if isinstance(c, dict) else None
+
+
 def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str],
-           king_uid: int | None = None) -> tuple[list[int], list[float], list[str]]:
+           king_uid: int | None = None, burn_uid: int | None = None) -> tuple[list[int], list[float], list[str]]:
     pairs, dropped, seen = [], [], set()
-    to_king = king_holds(king_uid, listed, hotkeys)
+    if burn_uid is not None:
+        dest, what = (burn_uid, "burn") if burn_holds(burn_uid, listed, hotkeys) else (None, "")
+    else:
+        dest, what = (king_uid, "king") if king_holds(king_uid, listed, hotkeys) else (None, "")
     for k, w in weights.items():
         uid, hk = int(k), listed.get(str(k))
         if uid in seen:
@@ -81,9 +96,9 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
             dropped.append(f"uid {uid}: not on the subnet")
         elif hotkeys[uid] != hk:
             note = f"uid {uid}: now held by {hotkeys[uid]}, scored for {hk}"
-            if to_king and _weight(w) > 0:
-                pairs.append((king_uid, _weight(w)))
-                note += f"; its share goes to the king uid {king_uid}"
+            if dest is not None and _weight(w) > 0:
+                pairs.append((dest, _weight(w)))
+                note += f"; its share goes to the {what} uid {dest}"
             dropped.append(note)
         elif _weight(w) > 0:
             pairs.append((uid, _weight(w)))
@@ -93,7 +108,7 @@ def by_uid(weights: dict[str, float], listed: dict[str, str], hotkeys: list[str]
 
 
 def select(doc: dict, hotkeys: list[str]) -> tuple[list[int], list[float], list[str]]:
-    return by_uid(doc["weights"], doc["hotkeys"], hotkeys, doc.get("king_uid"))
+    return by_uid(doc["weights"], doc["hotkeys"], hotkeys, doc.get("king_uid"), burn_uid_of(doc))
 
 
 def _print_unchecked(doc: dict) -> None:

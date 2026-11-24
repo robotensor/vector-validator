@@ -118,8 +118,10 @@ them; the validator does not recompute anything.
 - The validator sets weights on exactly the listed uids (after the checks below), in the published proportions,
   and on no other uid. It adds no uid of its own.
 - It divides the kept weights by their total before calling the SDK, so they sum to 1. A share whose uid changed
-  hands goes to the king (when the king's uid passes the same check); any other dropped uid leaves the others in
-  their published proportions.
+  hands goes to the document's burn uid (`basis.contributors.burn_uid`, the subnet owner's uid, which the chain burns)
+  when that uid is on the subnet and, if listed, still held by the listed hotkey. A document without `burn_uid`
+  (before v9.3) sends it to the king instead, under the same check. Any other dropped uid leaves the others in their
+  published proportions.
 - The SDK scales the largest weight to 65535 (u16) and the chain uses each validator's weights relative to their
   sum.
 - Each pass prints the document's `round`, its uids and `king_uid`. A dry run prints the normalised values.
@@ -140,7 +142,7 @@ sequenceDiagram
   V->>V: netuid matches, uids are integers, at is recent
   V->>C: metagraph hotkeys
   C-->>V: hotkey per uid
-  V->>V: drop uids now held by another hotkey, their share to the king
+  V->>V: drop uids now held by another hotkey, their share to the burn uid
   V->>C: set_weights(listed uids, weights / their total)
   C-->>V: success or message
 ```
@@ -158,8 +160,9 @@ A document is refused when:
 
 A uid is dropped when it is listed twice, has no hotkey listed, is not on the subnet,
 or is now held by a different hotkey than the one the team scored. So a weight never goes to whoever took over a
-deregistered uid: a share whose uid changed hands goes to the king, if the king's uid is still held by the listed
-hotkey, else the rest is renormalised. Non-finite and non-positive weights count as 0.
+deregistered uid: a share whose uid changed hands goes to the burn uid (the owner's uid, burned by the chain), as
+the team's server does for a share no registered address claims; with no usable burn uid the rest is renormalised.
+Documents from before v9.3 (no `burn_uid`) send it to the king's uid instead. Non-finite and non-positive weights count as 0.
 
 ## Chain calls
 
