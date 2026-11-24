@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import math
 import sys
 import time
@@ -8,7 +9,7 @@ from collections import defaultdict
 
 from . import chain as ch
 from . import weights as wt
-from .config import open_wallet
+from .config import home, open_wallet
 
 
 def pinned_pubkey(key: str | None) -> str | None:
@@ -145,6 +146,30 @@ def _print_unchecked(doc: dict) -> None:
         print(f"  {int(k):4d}  {_weight(x):.6f}  {doc['hotkeys'].get(k, '?')}")
 
 
+def state_path(args):
+    return home() / f"last-set-{args.netuid}.json"
+
+
+def last_set(args) -> dict | None:
+    try:
+        return json.loads(state_path(args).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def remember_set(args, uids: list[int], ws: list[float], hotkeys: list[str], doc: dict) -> None:
+    p = state_path(args)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"uids": uids, "weights": [round(x, 6) for x in ws], "hotkeys": [hotkeys[u] for u in uids],
+                             "round": doc.get("round"), "at": dt.datetime.now(dt.timezone.utc).isoformat()}))
+
+
+def unchanged(args, uids: list[int], ws: list[float], hotkeys: list[str]) -> bool:
+    last = last_set(args)
+    return bool(last) and last.get("uids") == uids and last.get("weights") == [round(x, 6) for x in ws] \
+        and last.get("hotkeys") == [hotkeys[u] for u in uids]
+
+
 def run_once(args, fetch, pubkey: str | None) -> bool:
     doc = fetch_verified(fetch, pubkey, args.max_age, args.netuid)
     w = doc["weights"]
@@ -178,11 +203,16 @@ def run_once(args, fetch, pubkey: str | None) -> bool:
     if not uids:
         print("no weights to set this pass")
         return True
+    if unchanged(args, uids, ws, hotkeys):
+        print("unchanged since the last set: nothing to set until a round ends or an evaluation is decided")
+        return True
     wallet = open_wallet(args)
     if wallet.hotkey.ss58_address not in hotkeys:
         print(f"warning: validator hotkey {wallet.hotkey.ss58_address} is not registered on netuid {args.netuid}")
     ok, msg = ch.set_weights(sub, wallet, args.netuid, uids, ws)
     print(("set weights for " if ok else "setting weights failed for ") + f"{len(uids)} uids" + (f": {msg}" if msg else ""))
+    if ok:
+        remember_set(args, uids, ws, hotkeys, doc)
     return ok
 
 

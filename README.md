@@ -85,7 +85,7 @@ the subnet with a validator permit.
 - A dry run without the bittensor SDK prints the weights as published, without the metagraph check.
 - It warns when your hotkey is not registered on the subnet.
 - Errors in one pass are printed and the loop goes on: the next pass comes after `retry_s` (60 s) after a failed
-  pass and after `interval_s` (1200 s) after a successful one. Run it under systemd, pm2 or a similar supervisor.
+  pass and after `interval_s` (1200 s) after a successful one. It calls `set_weights` only when the weights differ from the ones it last set (they change only when a round ends or an evaluation is decided); otherwise the pass sets nothing. The last set is kept in `~/.vector-validator/last-set-<netuid>.json`. Run it under systemd, pm2 or a similar supervisor.
 - On a refused document or an API outage nothing is set that pass, the last weights stay on chain and age out, and
   an outage longer than the subnet's activity cutoff makes the validator inactive.
 - Commit-reveal: on a subnet with `commit_reveal_weights_enabled` the SDK sends a timelocked commit instead of the

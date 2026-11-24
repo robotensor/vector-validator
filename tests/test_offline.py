@@ -634,3 +634,14 @@ def test_help_says_pass_and_the_wallet_default(capsys):
     out = " ".join(capsys.readouterr().out.split())
     assert "round" not in out and "seconds between passes" in out and "--retry" in out
     assert "bittensor default (~/.bittensor/wallets)" in out
+
+
+def test_run_once_sets_only_when_the_weights_change(monkeypatch, capsys):
+    calls = _chain(monkeypatch, HK)
+    doc, pk = _doc({"1": 1.0}, {"1": "5Alice"})
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    assert calls == [(7, [1], [1.0])] and "unchanged since the last set" in capsys.readouterr().out
+    doc2, pk2 = _doc({"0": 0.3, "1": 0.7}, {"0": "5Val", "1": "5Alice"})
+    assert validator.run_once(_vargs(), lambda: doc2, pk2)
+    assert len(calls) == 2
