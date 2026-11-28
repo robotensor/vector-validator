@@ -101,6 +101,24 @@ def test_run_once_sets_weights_by_uid(monkeypatch, capsys):
     assert "uid 2" in capsys.readouterr().out
 
 
+def test_emission_share_is_verified_and_shown_and_the_weights_are_set_as_listed(monkeypatch, capsys):
+    calls = _chain(monkeypatch, HK)
+    body = {"format": "vector-weights/2", "round": 2, "at": NOW, "netuid": 7, "king_uid": 1, "emission_share": 0.1,
+            "basis": {"contributors": {"round": 2}}, "weights": {"1": 0.7, "2": 0.3},
+            "hotkeys": {"1": "5Alice", "2": "5Bob"}}
+    doc, pk = _sign(body)
+    assert verify(doc, pk, 7)["emission_share"] == 0.1
+    assert validator.run_once(_vargs(), lambda: doc, pk)
+    assert calls == [(7, [1, 2], [0.7, 0.3])]
+    assert "emission share 0.1: the fraction of the subnet's emission these weights stand for" in capsys.readouterr().out
+    tampered = {**doc, "emission_share": 0.3}
+    with pytest.raises(ValueError, match="bad weights signature"):
+        verify(tampered, pk, 7)
+    for bad in (None, "0.1", True, 2, float("nan")):
+        assert validator.emission_share({"emission_share": bad}) is None
+    assert validator.emission_share({}) is None
+
+
 def test_run_once_dry_run_sets_nothing(monkeypatch, capsys):
     calls = _chain(monkeypatch, HK)
     doc, pk = _doc({"1": 1.0}, {"1": "5Alice"})

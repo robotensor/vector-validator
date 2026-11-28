@@ -102,7 +102,7 @@ the subnet with a validator permit.
 `GET https://vector.robotensor.ai/v1/weights` is public and needs no sign-in. While nobody but the burn uid would get weight it answers 503 and the validator sets nothing. Format `vector-weights/2`:
 
 ```
-{format: "vector-weights/2", round, netuid, at, king_uid,
+{format: "vector-weights/2", round, netuid, at, king_uid, emission_share,
  weights: {"<uid>": w, ...}, hotkeys: {"<uid>": "<ss58>", ...},
  basis: {...},
  public_key: "<64 hex>", signature: "<base64>"}
@@ -116,6 +116,10 @@ registered}], burned}` lists the ranks (it replaced `basis.king`); `basis.split 
 share was split between the ranks and the contributors (1 : 2 by default; the team can change it). The validator sets the uids the document lists, as published. `basis` says how the team computed
 them; the validator does not recompute anything.
 
+`emission_share` is the fraction of the subnet's emission these weights stand for (0.30 while both competitions take
+part, 0.10 with Expert only); `weights` always add up to 1 within it. The validator prints it and sets the weights as
+listed. Older documents have no `emission_share`.
+
 ### How the weights are set
 
 - The validator sets weights on exactly the listed uids (after the checks below), in the published proportions,
@@ -128,7 +132,8 @@ them; the validator does not recompute anything.
   others in their published proportions.
 - The SDK scales the largest weight to 65535 (u16) and the chain uses each validator's weights relative to their
   sum.
-- Each pass prints the document's `round`, its uids, `king_uid` and the expert ranks (`basis.expert.ranks`). A dry
+- Each pass prints the document's `round`, its uids, `king_uid`, `emission_share` and the expert ranks
+  (`basis.expert.ranks`). A dry
   run prints the normalised values.
 
 The signature is ed25519 over the document without `public_key` and `signature`, as JSON with sorted keys and no

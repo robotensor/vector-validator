@@ -61,6 +61,14 @@ def published_total(doc: dict) -> float:
     return sum(_weight(x) for x in doc["weights"].values())
 
 
+def emission_share(doc: dict) -> float | None:
+    """The fraction of the subnet's emission the document's weights stand for; None when the document has none."""
+    v = doc.get("emission_share")
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1:
+        return None
+    return float(v)
+
+
 def king_holds(king_uid, listed: dict[str, str], hotkeys: list[str]) -> bool:
     if not isinstance(king_uid, int) or isinstance(king_uid, bool) or not 0 <= king_uid < len(hotkeys):
         return False
@@ -177,6 +185,9 @@ def run_once(args, fetch, pubkey: str | None) -> bool:
           f"({len(w)} uids, round {doc.get('round', '?')}, {doc['format']}, key {doc['public_key'][:16]}...)")
     print(f"  published total {published_total(doc):.6f}, king uid {doc.get('king_uid', '?')}: only these uids get "
           "weight, in these proportions")
+    share = emission_share(doc)
+    if share is not None:
+        print(f"  emission share {share:g}: the fraction of the subnet's emission these weights stand for")
     ranks = expert_ranks(doc)
     if ranks:
         print("  expert ranks: " + ", ".join(
